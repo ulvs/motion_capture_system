@@ -37,7 +37,7 @@ def extract_pose(msg):
     """ Extract the pose from a message
     :param msg: An Odometry, Subject or any variation of Pose message
     :return: The Pose contained in msg
-    :rtype: :class:`geometry_msgs.msg.Pose`
+    :rtype: class:`geometry_msgs.msg.Pose`
     """
     if isinstance(msg, (Odometry, PoseWithCovarianceStamped)):
         return msg.pose.pose
@@ -72,7 +72,7 @@ def pose_diff(msg1, msg2):
     :param msg2: Second message. An Odometry, Subject or any variation of Pose message
     
     :return: Difference between the two essages as a geometry_msgs.msg.Pose
-    :rtype:  :class:`geometry_msgs.msg.Transform`
+    :rtype:  class:`geometry_msgs.msg.Transform`
     """
     pose1 = extract_pose(msg1)
     pose2 = extract_pose(msg2)
@@ -105,9 +105,9 @@ def pose_diff(msg1, msg2):
 class PoseComparator(object):
     """A class for comparing a position (from the `child_topic`) to ground truth 
     (from the `parent_topic`).Both topics should be publishing either 
-    class: `geometry_msgs.msg.PoseStamped`, 
-    class: `geometry_msgs.msg.PoseWithCovarianceStamped`, or 
-    class: `nav_msgs.msg.Odometry` messages.
+    :class: `geometry_msgs.msg.PoseStamped`, 
+    :class: `geometry_msgs.msg.PoseWithCovarianceStamped`, or 
+    :class: `nav_msgs.msg.Odometry` messages.
 
     :param parent_topic: Name of the topic publishing the ground truth. 
     :type parent_topic: str
@@ -117,8 +117,10 @@ class PoseComparator(object):
     should be transformed to the frame of the parent topic and published.
     :type publish_transformed_child: bool
     :param publish_difference: True if the diffrence between the child topic
-    and the parent topic should be published. 
+    and the parent topic should be published as a 
+    :class: `geometry_msgs.msg.TwistStamped`. 
     :type publish_difference: bool
+    ::
     """
     def __init__(self, 
             parent_topic, 
@@ -127,7 +129,7 @@ class PoseComparator(object):
             publish_difference=True,
             parent_buffer_size=100,
             sync_at_init=False):
-        """Constructor method
+        """Initialization method
         """
         super(PoseComparator, self).__init__()
         self.parent_topic = parent_topic
@@ -147,19 +149,22 @@ class PoseComparator(object):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.tf_brodcaster = tf2_ros.StaticTransformBroadcaster()
         self.sync_sub = rospy.Subscriber(
-                '/comp/sync', 
+                'comp/sync', 
                 std_msgs.msg.Bool, 
-                self.sync_callback
-                )
+                self.sync_callback,
+                queue_size=1)
         if self.publish_difference:
-            self.diff_pub = rospy.Publisher('/comp/difference', 
-                        TwistStamped, 
-                        queue_size=1)
+            self.diff_pub = rospy.Publisher(
+                    'comp/difference', 
+                    TwistStamped, 
+                    queue_size=1,
+                    tcp_nodelay=True)
         if self.publish_trasformed_child:
             self.trans_pub = rospy.Publisher(
-                    '/comp/tranformed', 
+                    'comp/tranformed', 
                     PoseStamped, 
-                    queue_size=1)
+                    queue_size=1,
+                    tcp_nodelay=True)
         self.transform_received = False
         self.parent_frame = None
         self.child_frame = None
@@ -250,7 +255,6 @@ class PoseComparator(object):
 
         :param msg: Any stamped ROS message containing a pose.
         """
-        
         if self.parent_frame is None:
             self.parent_frame = msg.header.frame_id
         self.parent_msg_buffer.append((msg.header.stamp, extract_pose(msg)))
@@ -317,7 +321,8 @@ class PoseComparator(object):
         
         The message will be published as a class:`geometry_msgs.msg.PoseStamped`.
         :param msg: An Odometry, Subject or any variation of PoseStamped message containing the 
-                    Pose of the tracked object in the chid frame.
+                    Pose of the tracked object in the child frame.
+        :type Msg: 
         """
         if self.child_frame is None:
             self.child_frame = msg.header.frame_id
@@ -326,7 +331,6 @@ class PoseComparator(object):
             msg_pose = tf2_geometry_msgs.PoseStamped()
             msg_pose.header = msg.header
             msg_pose.pose = extract_pose(msg)
-            
             try:
                 msg_trans = self.tf_buffer.transform(msg_pose, self.parent_frame)
             except (tf2_ros.LookupException, 
@@ -342,8 +346,8 @@ class PoseComparator(object):
         """Create a transform between the parent frame and the 
         child frame based on the current difference between the 
         parrent topic and the child topic. i.e. The difference between
-        the poses should be zero at the time that this function is called 
-        in the transformed frame of reference 
+        the poses will be zero in the transformed frame of reference 
+        at the time that this function is called.
         """
         parent_msg = rospy.wait_for_message(
                 self.parent_topic, 
@@ -393,11 +397,17 @@ if __name__ == '__main__':
     rospy.init_node('sync_mocap')
     parent_topic = rospy.get_param('~parent_topic') 
     child_topic = rospy.get_param('~child_topic')
-    buffer_size = int(rospy.get_param('~buffer_size'))
+    buffer_size = int(rospy.get_param('~buffer_size', 100))
+    publish_trasformed_child = bool(rospy.get_param('~publish_transformed_child', True))
+    publish_difference = bool(rospy.get_param('~publish_difference', True))
+    sync_at_init = bool(rospy.get_param('~sync_at_init', False))
     comparator = PoseComparator(
             parent_topic, 
             child_topic, 
-            parent_buffer_size=buffer_size
+            parent_buffer_size=buffer_size,
+            publish_trasformed_child=publish_trasformed_child,
+            publish_difference=publish_difference,
+            sync_at_init=sync_at_init
             )
     rospy.spin()
                      
