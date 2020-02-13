@@ -3,12 +3,12 @@
 
 -->
 <launch>
-<include file="$(find svea_sensors)/launch/transforms.launch" />
+<include file="$(find mocap_qualisys)/resources/camera_comp/transforms.launch" />
 <group>
-<param name="zed_description" textfile="$(find svea_sensors)/urdf/zedm.urdf" />
-<node name="zed_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">  
-    <remap from="robot_description" to="zed_description" />
-</node>
+    <param name="zed_description" textfile="$(find mocap_qualisys)/resources/camera_comp/zedm.urdf" />
+    <node name="zed_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">  
+        <remap from="robot_description" to="zed_description" />
+    </node>
 </group>
 
 <group ns="zed">
@@ -42,6 +42,6 @@
   type="play"
   name="rosbag_player"
   output="screen"
-  args="--clock $(find mocap_qualisys)/bagfiles/camera_comparision.bag"/>
+  args="--clock $(find mocap_qualisys)/resources/camera_comp/camera_comparision.bag"/>
 
 </launch>

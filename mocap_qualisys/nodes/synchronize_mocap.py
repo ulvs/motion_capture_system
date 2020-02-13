@@ -222,7 +222,6 @@ class PoseComparator(object):
         if self.child_topic[0] != '/':
             self.child_topic = rospy.get_namespace() + self.child_topic
         parent_data_type = rostopic.get_topic_type(self.parent_topic, blocking=True)[0]
-        rospy.logwarn('Child topic: {}'.format(self.child_topic))
         child_data_type = rostopic.get_topic_type(self.child_topic, blocking=True)[0]
         self.parent_msg_class = roslib.message.get_message_class(parent_data_type)
         self.child_msg_class = roslib.message.get_message_class(child_data_type)
@@ -516,7 +515,6 @@ if __name__ == '__main__':
     publish_trasformed_child = bool(rospy.get_param('~publish_transformed_child', True))
     publish_difference = bool(rospy.get_param('~publish_difference', True))
     sync_at_init = bool(rospy.get_param('~sync_at_init', False))
-    sync_odom_child_frame = bool(rospy.get_param('~sync_at_init', True))
     comparator = PoseComparator(
             parent_topic,
             child_topic,

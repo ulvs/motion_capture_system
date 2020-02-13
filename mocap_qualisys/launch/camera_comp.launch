@@ -3,13 +3,12 @@
 
 -->
 <launch>
-<include file="$(find svea_sensors)/launch/transforms.launch" />
+<include file="$(find mocap_qualisys)/resources/camera_comp/transforms.launch" />
 
-<!--
 <group ns="zed">
   <include file="$(find svea_sensors)/launch/zed_camera.launch">
     <arg name="camera_model"        value="zedm" />
-    <arg name="spatial_memory"      value="true" />
+    <arg name="spatial_memory"      value="false" />
     <arg name="publish_tf"        default="false" /> 
             
   </include>
@@ -24,7 +23,6 @@
     <param name="sync_at_init" value="False"/>
   </node>
 </group>
--->
 
 <group ns="rs">
   <rosparam>
@@ -66,7 +64,7 @@
   type="record"
   name="record"
   output="screen"
-  args="-o /home/nvidia/bagfiles/ /rs/realsense_camera/odom/sample /qualisys/svea3/pose /zed/zed_node/odometry /rosout /parameter_descriptions /parameter_updates"
+  args="-o /home/nvidia/bagfiles/ /qualisys/svea3/pose /rs/realsense_camera/odom/sample /zed/zed_node/odom /rosout /parameter_descriptions /parameter_updates"
   launch-prefix="bash -c 'sleep 10; $0 $@' "/>
 
 </launch>
