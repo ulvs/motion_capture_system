@@ -17,9 +17,11 @@ import rostopic
 import roslib.message
 import tf2_ros
 import tf2_geometry_msgs
+from std_msgs.msg import Header as MsgHeader
 from tf.transformations import quaternion_multiply, euler_from_quaternion
 from geometry_msgs.msg import Pose, PoseStamped, Transform, TransformStamped, TwistStamped
 from geometry_msgs.msg import PoseWithCovariance, PoseWithCovarianceStamped
+from geometry_msgs.msg import Point, Quaternion
 from nav_msgs.msg import Odometry
 import std_msgs.msg
 from qualisys.msg import Subject
@@ -32,10 +34,16 @@ __email__ = "tbolin@kth.se"
 __status__ = "Development"
 
 
-
+def extract_header(msg):
+    seq = msg.header.seq
+    stamp = msg.header.stamp
+    frame_id = extract_frame(msg)
+    new_header = MsgHeader(seq, stamp, frame_id)
+    return new_header
+    
 def extract_pose(msg):
     """ Extract the pose from a message
-    :param msg: An Odometry, Subject or any variation of Pose message
+    :param msg: An Odometry, Subject, Transform or any variation of Pose message
     :return: The Pose contained in msg
     :rtype: class:`geometry_msgs.msg.Pose`
     """
@@ -50,9 +58,38 @@ def extract_pose(msg):
         pose.position = msg.position
         pose.orientation = msg.orientation
         return pose
+    elif isinstance(msg, TransformStamped):
+        return extract_pose(msg.transform)
+    elif isinstance(msg, Transform):
+        pose = Pose()
+        pose.position = msg.translation
+        pose.orientation = msg.rotation
+        return pose
     else:
         raise TypeError("Could not extract pose from message of type {}".format(type(msg)))
 
+def extract_frame(msg):
+    """ Extract the reference frame from a message
+    :param msg: An Odometry, Subject or any variation of Pose message
+    :return: The reference frame for the message
+    :rtype: str
+    """
+    if isinstance(msg, Odometry):
+        return msg.child_frame_id
+    else:
+        return msg.header.frame_id
+
+def to_stamped_tf_pose(msg):
+    """ Extract the reference frame from a message
+    :param msg: An Odometry, Subject or any variation of Pose message
+    :return: A stamped pose corresponding to the message.
+    :rtype: class:`tf2_geometry_msgs.PoseStamped`
+    """
+    msg_pose = tf2_geometry_msgs.PoseStamped() 
+    msg_pose.header = extract_header(msg)
+    msg_pose.header.frame_id = extract_frame(msg)
+    msg_pose.pose = extract_pose(msg)
+    return msg_pose
 
 def iter_quat(quaternion):
     """Iterate over a quaternion in x, y, z, w order.
@@ -101,6 +138,32 @@ def pose_diff(msg1, msg2):
     ret_tf.translation.z = pos1.z + trans_vec[2]
     return ret_tf
 
+def translate_pose(msg, transform):
+        """Move and rotate a pose contained in `msg` by using a transform.
+        The rotation is independent of the translation, 
+        unlike when applying a transform.
+        :param msg: A ROS message containing a :class:`Pose`
+        :type msg: An Odometry, Subject or any variation of Pose message
+        
+        :return: A translated and rotated pose.
+        :rtype: class:`tf2_geometry_msgs.PoseStamped`
+        """
+        pose = extract_pose(msg)
+        position = pose.position
+        orientation = iter_quat(pose.orientation)
+        translation = transform.transform.translation
+        rotation = iter_quat(transform.transform.rotation)
+        new_position = Point()
+        xyz = [position.x - translation.x,
+               position.y - translation.y,
+               position.z - translation.z]
+        new_position = Point(*xyz)
+        new_orientation = quaternion_multiply(orientation, rotation)
+        new_orientation = Quaternion(*new_orientation)
+        new_pose = Pose(new_position, new_orientation)
+        new_header = extract_header(msg)
+        new_pose = tf2_geometry_msgs.PoseStamped(new_header, new_pose)
+        return new_pose
 
 class PoseComparator(object):
     """A class for comparing a position (from the `child_topic`) to ground truth 
@@ -111,20 +174,35 @@ class PoseComparator(object):
 
     :param parent_topic: Name of the topic publishing the ground truth. 
     :type parent_topic: str
-    :param parent_topic: Name of the topic publishing the ground truth. 
+    :param parent_topic: Name of the topic publishing the position that
+                         should be evaluated.
     :type parent_topic: str
-    :param publish_transformed_child: True if the pose published on the child topic
-    should be transformed to the frame of the parent topic and published.
-    :type publish_transformed_child: bool
+    :param sync_topic: The topic that should trigger syncrnization. 
+                       Default: `comp/sync`.
+    :type sync_topic: str, optional
+    :param publish_transformed_child: True if the pose published on 
+                                      the child topic should be transformed 
+                                      to the frame of the parent topic and published.
+                                      Default: `True`
+    :type publish_transformed_child: bool, optional
     :param publish_difference: True if the diffrence between the child topic
-    and the parent topic should be published as a 
-    :class: `geometry_msgs.msg.TwistStamped`. 
-    :type publish_difference: bool
-    ::
+            and the parent topic should be published as a 
+            :class: `geometry_msgs.msg.TwistStamped`. Default: `True`
+    :type publish_difference: bool, optional
+    :param parent_buffer_size: How many ground truth messages that should be buffered
+                               to use for comparing delayed messages on `child_topic`.
+                               Default: 100
+    :type parent_buffer_size: int, optional
+    :param sync_at_init: `True` if a syncronization should take place immediately
+                         when the class is initiated. `False` otherwise.
+                         Default: `False`
+    :type sync_at_init: bool, optional
     """
     def __init__(self, 
-            parent_topic, 
-            child_topic, 
+            parent_topic,
+            child_topic,
+            child_frame='',
+            sync_topic='comp/sync',
             publish_trasformed_child=True, 
             publish_difference=True,
             parent_buffer_size=100,
@@ -134,12 +212,18 @@ class PoseComparator(object):
         super(PoseComparator, self).__init__()
         self.parent_topic = parent_topic
         self.child_topic = child_topic
+        self.child_frame = child_frame
+        self.sync_topic = sync_topic or 'comp/sync'
         self.publish_trasformed_child = publish_trasformed_child
         self.publish_difference = publish_difference
         self.parent_buffer_size = parent_buffer_size
-
-        parent_data_type = rostopic.get_topic_type(parent_topic, blocking=True)[0]
-        child_data_type = rostopic.get_topic_type(child_topic, blocking=True)[0]
+        if self.parent_topic[0] != '/':
+            self.parent_topic = rospy.get_namespace() + self.parent_topic
+        if self.child_topic[0] != '/':
+            self.child_topic = rospy.get_namespace() + self.child_topic
+        parent_data_type = rostopic.get_topic_type(self.parent_topic, blocking=True)[0]
+        rospy.logwarn('Child topic: {}'.format(self.child_topic))
+        child_data_type = rostopic.get_topic_type(self.child_topic, blocking=True)[0]
         self.parent_msg_class = roslib.message.get_message_class(parent_data_type)
         self.child_msg_class = roslib.message.get_message_class(child_data_type)
         self.parent_msg_buffer = collections.deque(maxlen=self.parent_buffer_size)
@@ -149,7 +233,7 @@ class PoseComparator(object):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         self.tf_brodcaster = tf2_ros.StaticTransformBroadcaster()
         self.sync_sub = rospy.Subscriber(
-                'comp/sync', 
+                self.sync_topic, 
                 std_msgs.msg.Bool, 
                 self.sync_callback,
                 queue_size=1)
@@ -161,18 +245,16 @@ class PoseComparator(object):
                     tcp_nodelay=True)
         if self.publish_trasformed_child:
             self.trans_pub = rospy.Publisher(
-                    'comp/tranformed', 
+                    'comp/transformed', 
                     PoseStamped, 
                     queue_size=1,
                     tcp_nodelay=True)
         self.transform_received = False
         self.parent_frame = None
-        self.child_frame = None
         self._seq_count = 0
 
         if sync_at_init:
             self.sync_callback(True)
-
 
     def start_publish(self):
         """Start publishing comparision and the transformed 
@@ -256,7 +338,7 @@ class PoseComparator(object):
         :param msg: Any stamped ROS message containing a pose.
         """
         if self.parent_frame is None:
-            self.parent_frame = msg.header.frame_id
+            self.parent_frame = msg.header.frame_id #extract_frame(msg)
         self.parent_msg_buffer.append((msg.header.stamp, extract_pose(msg)))
         
         # rospy.loginfo_throttle(1, self.parent_msg_buffer)
@@ -307,14 +389,45 @@ class PoseComparator(object):
         
         :param msg: Any stamped ROS message containing a pose.
         """
-        if self.child_frame is None:
-            self.child_frame = msg.header.frame_id
-        msg_pose = tf2_geometry_msgs.PoseStamped()
-        msg_pose.header = msg.header
-        msg_pose.pose = extract_pose(msg)
-        self.child_msg_buffer.append((msg.header.stamp, msg_pose))
-        # self.child_msg_buffer.append((msg.header.stamp, extract_pose(msg)))
-
+        if not self.child_frame:
+            self.child_frame = extract_frame(msg)
+        msg_transformed = self._move_to_child_frame(msg)
+        msg_tuple = (msg_transformed.header.stamp, msg_transformed,)
+        self.child_msg_buffer.append(msg_tuple)   
+    
+    def _move_to_child_frame(self, msg):
+        """Calculate the position of the child frame based on the sensors
+        position in the sensor's frame."""
+        msg_pose = to_stamped_tf_pose(msg)
+        position = msg_pose.pose.position
+        orientation = iter_quat(msg_pose.pose.orientation)
+        original_frame_id = extract_frame(msg)
+        try:
+            transform = self.tf_buffer.lookup_transform(self.child_frame, original_frame_id, rospy.Time())
+        except (tf2_ros.LookupException,
+                tf2_ros.ConnectivityException, 
+                tf2_ros.ExtrapolationException), e:
+            # No transform available yet, do not publish estimated pose in the mocap frame
+            rospy.logerr_throttle(5, e.__repr__())
+            return
+        #translation = transform.transform.translation
+        #rotation = iter_quat(transform.transform.rotation)
+        #new_position = Point()
+        #xyz = [position.x - translation.x,
+        #       position.y - translation.y,
+        #       position.z - translation.z]
+        #new_position = Point(*xyz)
+        #new_orientation = quaternion_multiply(orientation, rotation)
+        #new_orientation = Quaternion(*new_orientation)
+        #new_pose = Pose(new_position, new_orientation)
+        #new_header = extract_header(msg_pose)
+        #new_pose = tf2_geometry_msgs.PoseStamped(new_header, new_pose)
+        new_pose = translate_pose(msg, transform)
+        new_pose.header.frame_id = self.child_frame
+        #rospy.loginfo("Child frame: {}".format(self.child_frame))
+        #rospy.loginfo("To child frame\nTransform:\n{}\nBefore Transform:\n{}\nAfter transform:\n{}"
+        #              .format(transform, msg_pose, new_pose))
+        return new_pose
 
     def child_transform_callback(self, msg):
         """Publish the topic used to define the child frame transformed into the parent frame.
@@ -324,15 +437,12 @@ class PoseComparator(object):
                     Pose of the tracked object in the child frame.
         :type Msg: 
         """
-        if self.child_frame is None:
+        if not self.child_frame:
             self.child_frame = msg.header.frame_id
-
         if self.publish_trasformed_child and not self.parent_frame is None:
-            msg_pose = tf2_geometry_msgs.PoseStamped()
-            msg_pose.header = msg.header
-            msg_pose.pose = extract_pose(msg)
+            msg_trans = self._move_to_child_frame(msg)
             try:
-                msg_trans = self.tf_buffer.transform(msg_pose, self.parent_frame)
+                msg_trans = self.tf_buffer.transform(msg_trans, self.parent_frame)
             except (tf2_ros.LookupException, 
                     tf2_ros.ConnectivityException, 
                     tf2_ros.ExtrapolationException), e:
@@ -358,10 +468,9 @@ class PoseComparator(object):
                 self.child_msg_class, 
                 timeout=2.0)
         if self.parent_frame is None:
-            self.parent_frame = parent_msg.header.frame_id
-        if self.child_frame is None:
-            self.child_frame = child_msg.header.frame_id
-
+            self.parent_frame = parent_msg.header.frame_id #extract_frame(parent_msg)
+        if not self.child_frame:
+            self.child_frame = extract_frame(child_msg)
         if parent_msg is None or child_msg is None:
             if parent_msg is None and child_msg is None:
                 rospy.logwarn("Positions from {} and {} not available, no transform created").format(
@@ -377,13 +486,17 @@ class PoseComparator(object):
                     self.child_topic
                 )
             return
-
+        #################################
+        msg_pose = self._move_to_child_frame(child_msg)
+        #################################
         t = TransformStamped()
         t.header.stamp = child_msg.header.stamp
         t.header.frame_id = self.parent_frame
         t.child_frame_id = self.child_frame
-        t.transform = pose_diff(parent_msg, child_msg)
+        t.transform = pose_diff(parent_msg, msg_pose)
         self.tf_brodcaster.sendTransform(t)
+        rospy.loginfo("Synced parent frame: {} with child frame {}"
+                       .format(self.parent_frame, self.child_frame) )
         self.start_publish()
 
 
@@ -397,13 +510,18 @@ if __name__ == '__main__':
     rospy.init_node('sync_mocap')
     parent_topic = rospy.get_param('~parent_topic') 
     child_topic = rospy.get_param('~child_topic')
+    child_frame = rospy.get_param('~child_frame', '')
+    sync_topic = rospy.get_param('~sync_topic', '')
     buffer_size = int(rospy.get_param('~buffer_size', 100))
     publish_trasformed_child = bool(rospy.get_param('~publish_transformed_child', True))
     publish_difference = bool(rospy.get_param('~publish_difference', True))
     sync_at_init = bool(rospy.get_param('~sync_at_init', False))
+    sync_odom_child_frame = bool(rospy.get_param('~sync_at_init', True))
     comparator = PoseComparator(
-            parent_topic, 
-            child_topic, 
+            parent_topic,
+            child_topic,
+            child_frame=child_frame,
+            sync_topic=sync_topic,
             parent_buffer_size=buffer_size,
             publish_trasformed_child=publish_trasformed_child,
             publish_difference=publish_difference,
