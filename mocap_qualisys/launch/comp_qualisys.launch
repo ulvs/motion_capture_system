@@ -17,11 +17,10 @@
     <rosparam param="model_list">[]</rosparam>
     <!--remap from="qualisys/F450/odom" to="/f450/odom"/-->
   </node>
-   
-   <node pkg="svea_sensors"
-         type="synchronize_qualisys.py"
-         name="sync_mocap"
-         output="screen">
+   <node pkg="mocap_qualisys"
+    type="synchronize_qualisys.py"
+    name="sync_mocap"
+    output="screen">
     <param name="parent_topic" value="/qualisys/SVEA6/pose"/>
     <param name="child_topic" value="/odometry/filtered"/>
     <param name="buffer_size" value="100"/>
