@@ -17,8 +17,11 @@
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/TwistStamped.h>
 #include <eigen_conversions/eigen_msg.h>
 #include <mocap_base/MoCapDriverBase.h>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
 
 using namespace std;
 using namespace Eigen;
@@ -34,6 +37,7 @@ Subject::Subject(ros::NodeHandle* nptr, const string& sub_name,
 
   pub_filter = nh_ptr->advertise<nav_msgs::Odometry>(name+"/odom", 1);
   pub_raw = nh_ptr->advertise<geometry_msgs::PoseStamped>(name+"/pose", 1);
+  pub_vel = nh_ptr->advertise<geometry_msgs::TwistStamped>(name+"/velocity", 1);
   return;
 }
 
@@ -104,8 +108,10 @@ void Subject::processNewMeasurement(
   geometry_msgs::PoseStamped pose_raw;
   pose_raw.header.stamp = ros::Time(time);
   pose_raw.header.frame_id = parent_frame;
+
   tf::quaternionEigenToMsg(m_attitude, pose_raw.pose.orientation);
   tf::pointEigenToMsg(m_position, pose_raw.pose.position);
+
   
   pub_raw.publish(pose_raw);
   if (!kFilter.isReady()) {
@@ -113,6 +119,9 @@ void Subject::processNewMeasurement(
     kFilter.prepareInitialCondition(time, m_attitude, m_position);
     return;
   }
+
+  // Transform matrix from parent to child frame
+  Isometry3d tf_parent2child = Isometry3d(Translation3d(m_position) * m_attitude);
 
   status = TRACKED;
   // Perfrom the kalman filter
@@ -126,8 +135,9 @@ void Subject::processNewMeasurement(
   odom_filter.child_frame_id = name + "/base_link";
   tf::quaternionEigenToMsg(kFilter.attitude, odom_filter.pose.pose.orientation);
   tf::pointEigenToMsg(kFilter.position, odom_filter.pose.pose.position);
-  tf::vectorEigenToMsg(kFilter.angular_vel, odom_filter.twist.twist.angular);
-  tf::vectorEigenToMsg(kFilter.linear_vel, odom_filter.twist.twist.linear);
+  // Transform twist to child frame
+  tf::vectorEigenToMsg(tf_parent2child.linear() * kFilter.angular_vel, odom_filter.twist.twist.angular);
+  tf::vectorEigenToMsg(tf_parent2child.linear() * kFilter.linear_vel, odom_filter.twist.twist.linear);
   // To be compatible with the covariance in ROS, we have to do some shifting
   Map<Matrix<double, 6, 6, RowMajor> > pose_cov(odom_filter.pose.covariance.begin());
   Map<Matrix<double, 6, 6, RowMajor> > vel_cov(odom_filter.twist.covariance.begin());
@@ -139,8 +149,23 @@ void Subject::processNewMeasurement(
   vel_cov.topRightCorner<3, 3>() = kFilter.state_cov.block<3, 3>(9, 6);
   vel_cov.bottomLeftCorner<3, 3>() = kFilter.state_cov.block<3, 3>(6, 9);
   vel_cov.bottomRightCorner<3, 3>() = kFilter.state_cov.block<3, 3>(6, 6);
+  // Transform the velocity cov to child frame
+  Matrix<double, 6, 6, RowMajor> r_vel = Matrix<double, 6, 6, RowMajor>::Zero();	//Zero initialized velocity cov matrix
+  r_vel.block<3, 3>(0, 0) = r_vel.block<3, 3>(3, 3) = tf_parent2child.linear();
+  vel_cov = r_vel * vel_cov * r_vel.transpose();
+
   pub_filter.publish(odom_filter);
   //ROS_INFO("filter time: %f", (ros::Time::now() - tbefore_filter).toSec());
+
+  // Publish velocity in parent frame
+  geometry_msgs::TwistStamped vel;
+  vel.header.stamp = ros::Time(time);
+  vel.header.frame_id = parent_frame;
+
+  tf::vectorEigenToMsg(kFilter.angular_vel, vel.twist.angular);
+  tf::vectorEigenToMsg(kFilter.linear_vel, vel.twist.linear);
+
+  pub_vel.publish(vel);
 
   return;
 }
