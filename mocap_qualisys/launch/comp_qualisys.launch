@@ -18,7 +18,7 @@
     <!--remap from="qualisys/F450/odom" to="/f450/odom"/-->
   </node>
    
-   <node pkg="svea_sensors"
+   <node pkg="mocap_qualisys"
     type="synchronize_qualisys.py"
     name="sync_mocap"
     output="screen">
