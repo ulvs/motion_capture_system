@@ -17,8 +17,8 @@ find_package(catkin REQUIRED COMPONENTS
 
 
 catkin_package(
-  #INCLUDE_DIRS include
-  #LIBRARIES ${PROJECT_NAME}
+  INCLUDE_DIRS include
+  LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS
     geometry_msgs tf mocap_base
   DEPENDS
@@ -59,6 +59,14 @@ target_link_libraries(mocap_qualisys_node
   mocap_qualisys_driver
   ${catkin_LIBRARIES}
 )
+
+catkin_add_gtest(utest test/utest.cpp)
+if(TARGET utest)
+  target_link_libraries(utest 
+  mocap_qualisys_driver
+  ${catkin_LIBRARIES}
+  )
+endif()
 
 else()
   message(ERROR " MacOS is unsupported! mocap_qualisys will not be built!")
