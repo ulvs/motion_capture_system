@@ -88,7 +88,7 @@ void CRTPacket::SetData(char* ptr)
     mnForceSinglePlateCount   = 0;
     mnGazeVectorCount         = 0;
     mnTimecodeCount           = 0;
-    mSkeletonCount           = 0;
+    mSkeletonCount            = 0;
 
     // Check if it's a data packet
     if (GetType() == PacketData)
@@ -103,7 +103,6 @@ void CRTPacket::SetData(char* ptr)
         unsigned int nComponentType    = SetByteOrder((unsigned int*)(pCurrentComponent + 4));
 
         mnComponentCount = SetByteOrder((unsigned int*)(mpData + 20));
-
         for (nComponent = 1; nComponent <= mnComponentCount && nComponentType > 0 && nComponentType < ComponentNone; nComponent++)
         {
             mpComponentData[nComponentType - 1] = pCurrentComponent;

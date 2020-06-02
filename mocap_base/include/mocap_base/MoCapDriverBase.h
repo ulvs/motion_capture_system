@@ -174,6 +174,7 @@ class MoCapDriverBase{
     // Disable the copy constructor and assign operator
     MoCapDriverBase(const MoCapDriverBase& );
     MoCapDriverBase& operator=(const MoCapDriverBase& );
+    int readRosParameters();
 
   protected:
     /*

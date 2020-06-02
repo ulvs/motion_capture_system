@@ -28,9 +28,11 @@ using namespace Eigen;
 
 namespace mocap{
 
-double QualisysDriver::deg2rad = M_PI / 180.0;
+template <class ProtocolType>
+double QualisysDriver_<ProtocolType>::deg2rad = M_PI / 180.0;
 
-bool QualisysDriver::init() {
+template <class ProtocolType>
+bool QualisysDriver_<ProtocolType>::init() {
   // The base port (as entered in QTM, TCP/IP port number, in the RT output tab
   // of the workspace options
   nh.param("server_address", server_address, string(""));
@@ -76,6 +78,8 @@ bool QualisysDriver::init() {
         "Reason: " << port_protocol.GetErrorString());
     return false;
   }
+
+
   ROS_INFO_STREAM("Connected to " << server_address << ":" << base_port);
   if (udp_stream_port > 0) 
   {
@@ -127,10 +131,12 @@ bool QualisysDriver::init() {
     Matrix<double, 6, 6>::Identity()*1e-3;
   measurement_noise *= measurement_noise; // Make it a covariance
   model_set.insert(model_list.begin(), model_list.end());
+  is_initialized = true;
   return true;
 }
 
-void QualisysDriver::disconnect() {
+template <class ProtocolType>
+void QualisysDriver_<ProtocolType>::disconnect() {
   ROS_INFO_STREAM("Disconnected from the QTM server at "
       << server_address << ":" << base_port);
   port_protocol.StreamFramesStop();
@@ -138,7 +144,13 @@ void QualisysDriver::disconnect() {
   return;
 }
 
-bool QualisysDriver::run() {
+template <class ProtocolType>
+bool QualisysDriver_<ProtocolType>::isInitialized() {
+  return is_initialized;
+}
+
+template <class ProtocolType>
+bool QualisysDriver_<ProtocolType>::run() {
   prt_packet = port_protocol.GetRTPacket();
   CRTPacket::EPacketType e_type;
   bool is_ok = false;
@@ -169,6 +181,7 @@ bool QualisysDriver::run() {
 
       default:
         ROS_WARN_THROTTLE(1, "Unhandled CRTPacket type, case: %i", e_type);
+        ROS_WARN_THROTTLE(1, "Unhandled CRTPacket type, case: %i", e_type);
         break;
     }
   }
@@ -178,7 +191,8 @@ bool QualisysDriver::run() {
   return is_ok;
 }
 
-void QualisysDriver::handleFrame() {
+template <class ProtocolType>
+void QualisysDriver_<ProtocolType>::handleFrame() {
   // Number of rigid bodies
   int body_count = prt_packet->Get6DOFBodyCount();
   // Compute the timestamp
@@ -195,7 +209,8 @@ void QualisysDriver::handleFrame() {
              current_frame_time, previous_frame_time);
   }
   else {
-    //ROS_INFO("Frame time drift: %f seconds", start_time_local_ + (current_frame_time - start_time_packet_) - ros::Time::now().toSec());
+    //ROS_INFO("Frame time drift: %f seconds", start_time_local_ 
+    // + (current_frame_time - start_time_packet_) - ros::Time::now().toSec());
     previous_frame_time = current_frame_time;
   }
   for (int i = 0; i< body_count; ++i) {
@@ -216,7 +231,8 @@ void QualisysDriver::handleFrame() {
   return;
 }
 
-void QualisysDriver::handleSubject(int sub_idx) {
+template <class ProtocolType>
+void QualisysDriver_<ProtocolType>::handleSubject(int sub_idx) {
   // Name of the subject
   string subject_name(port_protocol.Get6DOFBodyName(sub_idx));
   // Pose of the subject
@@ -284,5 +300,8 @@ void QualisysDriver::handleSubject(int sub_idx) {
   }
   return;
 }
-}
 
+template class QualisysDriver_<CRTProtocol>;
+template class QualisysDriver_<MockCRTProtocol>;
+
+}

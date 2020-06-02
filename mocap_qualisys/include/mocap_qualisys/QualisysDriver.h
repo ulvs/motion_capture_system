@@ -27,12 +27,12 @@
 #include <ros/ros.h>
 #include <mocap_base/MoCapDriverBase.h>
 #include <mocap_qualisys/RTProtocol.h>
-
-
+#include <mocap_qualisys/MockRTProtocol.h>
 
 namespace mocap{
 
-class QualisysDriver: public MoCapDriverBase{
+template <class ProtocolType>
+class QualisysDriver_: public MoCapDriverBase{
 
   public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -40,7 +40,7 @@ class QualisysDriver: public MoCapDriverBase{
      * @brief Constructor
      * @param nh Ros node
      */
-    QualisysDriver(const ros::NodeHandle& n):
+    QualisysDriver_(const ros::NodeHandle& n):
       MoCapDriverBase   (n),
       max_accel         (10.0),
       frame_interval    (0.01),
@@ -54,8 +54,10 @@ class QualisysDriver: public MoCapDriverBase{
     /*
      * @brief Destructor
      */
-    ~QualisysDriver() {
-      disconnect();
+    ~QualisysDriver_() {
+      if (port_protocol.Connected()){
+        disconnect();
+      }
       return;
     }
 
@@ -72,22 +74,28 @@ class QualisysDriver: public MoCapDriverBase{
 
     /*
      * @brief disconnect Disconnect to the server
-     * @Note The function is called automatically when the
+     * @Note The disconnect function is called automatically when the
      *  destructor is called.
      */
     void disconnect();
 
+    /*
+     * @brief Check if the driver has been succesfully initialized
+     * @return true if initialied
+     */
+    bool isInitialized();
+
+
   private:
     // Disable the copy constructor and assign operator
-    QualisysDriver(const QualisysDriver& );
-    QualisysDriver& operator=(const QualisysDriver& );
+    QualisysDriver_(const QualisysDriver_& );
+    QualisysDriver_& operator=(const QualisysDriver_& );
 
     // Handle a frame which contains the info of all subjects
     void handleFrame();
 
     // Handle a the info of a single subject
     void handleSubject(int sub_idx);
-    // void handleSubject(int sub_idx);
 
     // Unit converter
     static double deg2rad;
@@ -96,14 +104,14 @@ class QualisysDriver: public MoCapDriverBase{
     int base_port;
 
     // Port that the server should stream UDP packets to.
-    // 0 indicates that TCP is used.
+    // 0 indicates random port, -1 indicates that TCP is used.
     unsigned short udp_stream_port;
 
     // Minor version of the QTM protocol
     int qtm_protocol_version;
 
     // Protocol to connect to the server
-    CRTProtocol port_protocol;
+    ProtocolType port_protocol;
 
     // A pointer to the received packet
     // (no need to initialize)
@@ -121,6 +129,8 @@ class QualisysDriver: public MoCapDriverBase{
     // time point for last frame
     unsigned long last_packet_time;
 
+    bool is_initialized = false;
+
     // Convariance matrices for initializing kalman filters
     Eigen::Matrix<double, 12, 12> process_noise;
     Eigen::Matrix<double,  6,  6> measurement_noise;
@@ -129,7 +139,8 @@ class QualisysDriver: public MoCapDriverBase{
     double start_time_local_ = 0;
     double start_time_packet_ = 0;
 };
-}
 
-
+typedef QualisysDriver_<CRTProtocol> QualisysDriver;
+typedef QualisysDriver_<MockCRTProtocol> TestQualisysDriver;
+} //namespace mocap
 #endif

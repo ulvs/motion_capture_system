@@ -26,22 +26,16 @@ int main(int argc, char *argv[]) {
 
   mocap::QualisysDriver driver(nh);
   if(!driver.init()) {
-    ROS_INFO("Initialization of the Qualisys driver failed!");
+    ROS_ERROR("Initialization of the Qualisys driver failed!");
     return -1;
   }
   ROS_INFO("Successfully initialized QTM interface node!");
   
-  // ros::Rate r(200.0);
- bool status = true;
+  bool status = true;
   while(ros::ok() && status == true)
   { 
-    //ROS_INFO("Runing");
     status = driver.run();
-    //ROS_INFO("Spining");
     ros::spinOnce();
-    //ROS_INFO("Sleeping");
-    //ROS_INFO("Cycle time: %f", r.cycleTime().toSec());
-    // r.sleep();
   }
   ROS_INFO("QTM interface node shutting down");
   //driver.disconnect();
