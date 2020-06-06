@@ -30,7 +30,7 @@
 #include <mocap_qualisys/MockRTProtocol.h>
 
 namespace mocap{
-
+const int DEFAULT_PROTOCOL_VERSION = 18;
 template <class ProtocolType>
 class QualisysDriver_: public MoCapDriverBase{
 
@@ -85,6 +85,11 @@ class QualisysDriver_: public MoCapDriverBase{
      */
     bool isInitialized();
 
+    private: double dt;
+    public:
+    inline  double get_dt() {
+      return dt;
+    }
 
   private:
     // Disable the copy constructor and assign operator
@@ -136,9 +141,15 @@ class QualisysDriver_: public MoCapDriverBase{
     Eigen::Matrix<double,  6,  6> measurement_noise;
 
     // Timestamp stuff
-    double start_time_local_ = 0;
-    double start_time_packet_ = 0;
+    ros::Time start_time_ros_;  // ROS time when first packet arrived
+    uint64_t start_time_qtm_ = 0; // time stamp of first packet
+    int delay_compensation = 0;
+    bool is_first_frame = true;
+    uint64_t previous_frame_time = 0;
 };
+
+//template <class ProtocolType>
+//const int DEFAULT_PROTOCOL_VERSION = 18;
 
 typedef QualisysDriver_<CRTProtocol> QualisysDriver;
 typedef QualisysDriver_<MockCRTProtocol> TestQualisysDriver;

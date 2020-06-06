@@ -45,11 +45,12 @@ bool QualisysDriver_<ProtocolType>::init() {
   nh.param("publish_tf", publish_tf, false);
   nh.param("fixed_frame_id", fixed_frame_id, string("mocap"));
   int int_udp_port;
-  nh.param("udp_port", int_udp_port, -1);
-  nh.param("qtm_protocol_version", qtm_protocol_version, 18);
+  nh.param("udp_port", int_udp_port, 0);
+  nh.param("qtm_protocol_version", qtm_protocol_version, DEFAULT_PROTOCOL_VERSION);
+  nh.param("delay_compensation", delay_compensation, 0);
 
   if (server_address.empty()){
-    ROS_FATAL("server_address parameter empty");
+    ROS_ERROR("server_address parameter empty");
     return false;
   }
 
@@ -68,6 +69,11 @@ bool QualisysDriver_<ProtocolType>::init() {
   // Major protocol version is always 1, so only the minor version can be set
   const int major_protocol_version = 1;
   int minor_protocol_version = qtm_protocol_version;
+  if (minor_protocol_version <= 7) {
+    minor_protocol_version = DEFAULT_PROTOCOL_VERSION;
+    ROS_WARN("Requested QTM protocol version 1.%i too low. Using 1.%i",
+             qtm_protocol_version, DEFAULT_PROTOCOL_VERSION);
+  }
   if (!port_protocol.Connect((char *)server_address.data(), 
                              base_port, 
                              udp_port_ptr, 
@@ -102,16 +108,25 @@ bool QualisysDriver_<ProtocolType>::init() {
   // Start streaming data frames
   unsigned int system_frequency = port_protocol.GetSystemFrequency();
   CRTProtocol::EStreamRate stream_rate_mode = CRTProtocol::EStreamRate::RateAllFrames;
-  double dt = 1.0/(double)system_frequency;
+  dt = 1.0/system_frequency;
   if (frame_rate < system_frequency && frame_rate > 0){
     stream_rate_mode = CRTProtocol::EStreamRate::RateFrequency;
-    dt = 1.0/frame_rate;
+    if (frame_rate <= system_frequency -1){
+      frame_rate += 1;
+    }
+    int divisor = 2;
+    unsigned int actual_frame_rate = port_protocol.GetSystemFrequency();
+    while (actual_frame_rate >= frame_rate){
+      actual_frame_rate = port_protocol.GetSystemFrequency()/divisor;
+      divisor++;
+    }
+    dt = 1.0/actual_frame_rate;
   }
   else {
     if (frame_rate > system_frequency){
-      ROS_WARN("Requested capture rate %i larger than current system capture rate %i.", 
+      ROS_WARN("Requested capture rate %i greater than system capture rate %i.", 
                frame_rate, system_frequency);
-            }
+    }
     frame_rate = system_frequency;
   }
   bDataAvailable = port_protocol.StreamFrames(
@@ -196,23 +211,19 @@ void QualisysDriver_<ProtocolType>::handleFrame() {
   // Number of rigid bodies
   int body_count = prt_packet->Get6DOFBodyCount();
   // Compute the timestamp
-  static double previous_frame_time = 0.0;
-  double current_frame_time = prt_packet->GetTimeStamp() / 1e6;
-  if(start_time_local_ == 0)
+  uint64_t current_frame_time = prt_packet->GetTimeStamp();
+  if(is_first_frame == true)
   {
-    start_time_local_ = ros::Time::now().toSec();
-    start_time_packet_ = current_frame_time;
-    previous_frame_time = current_frame_time;
+    start_time_ros_ = ros::Time::now();
+    start_time_qtm_ = current_frame_time;
+    is_first_frame = false;
   }
-  else if (previous_frame_time > current_frame_time){
-    ROS_WARN("Dropped old frame from time %fdropped, previous frame was from time %f", 
+  else if (previous_frame_time >= current_frame_time){
+    ROS_WARN("Dropped old frame from time %ld dropped, previous frame was from time %ld", 
              current_frame_time, previous_frame_time);
+    return;
   }
-  else {
-    //ROS_INFO("Frame time drift: %f seconds", start_time_local_ 
-    // + (current_frame_time - start_time_packet_) - ros::Time::now().toSec());
-    previous_frame_time = current_frame_time;
-  }
+  previous_frame_time = current_frame_time;
   for (int i = 0; i< body_count; ++i) {
     string subject_name(port_protocol.Get6DOFBodyName(i));
 
@@ -239,7 +250,7 @@ void QualisysDriver_<ProtocolType>::handleSubject(int sub_idx) {
   const unsigned int matrix_size = 9;
   float x, y, z;
   float rot_array[matrix_size];
-  prt_packet->Get6DOFBody(sub_idx, x, y, z, rot_array);
+  prt_packet->Get6DOFBody(sub_idx, x, y, z, rot_array); 
 
   // Check if the subject is tracked by looking for NaN in the received data
   bool nan_in_matrix = false;
@@ -252,6 +263,7 @@ void QualisysDriver_<ProtocolType>::handleSubject(int sub_idx) {
   if(isnan(x) || isnan(y) || isnan(z) || nan_in_matrix) {
     if(subjects.at(subject_name)->getStatus() != Subject::LOST){
       subjects.at(subject_name)->disable();
+      ROS_WARN("Lost track of subject %s", subject_name.c_str());
     }
     return;
   }
@@ -266,10 +278,13 @@ void QualisysDriver_<ProtocolType>::handleSubject(int sub_idx) {
   // Re-enable the object if it is lost previously
   if (subjects.at(subject_name)->getStatus() == Subject::LOST) {
     subjects.at(subject_name)->enable();
+    ROS_INFO("Initializing subject %s", subject_name.c_str());
   }
 
-  const double packet_time = prt_packet->GetTimeStamp() / 1e6;
-  const double time = start_time_local_ + (packet_time - start_time_packet_);
+  const double packet_time = (prt_packet->GetTimeStamp()
+                              - start_time_qtm_) / 1e6
+                              - delay_compensation/1e6;
+  const double time = start_time_ros_.toSec() + packet_time;
 
   // Feed the new measurement to the subject
   subjects.at(subject_name)->processNewMeasurement(time, m_att, m_pos);
