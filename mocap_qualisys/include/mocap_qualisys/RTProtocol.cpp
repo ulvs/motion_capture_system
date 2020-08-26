@@ -5277,7 +5277,7 @@ bool CRTProtocol::SetForceSettings(
 } // SetForceSettings
 
 
-char* CRTProtocol::GetErrorString()
+const char* CRTProtocol::GetErrorString()
 {
     return maErrorStr;
 }

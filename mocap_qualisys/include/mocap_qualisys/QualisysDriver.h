@@ -23,7 +23,8 @@
 #include <string>
 #include <set>
 #include <vector>
-#include <boost/asio.hpp>
+#include <memory>
+//#include <boost/asio.hpp>
 #include <ros/ros.h>
 #include <mocap_base/MoCapDriverBase.h>
 #include <mocap_qualisys/RTProtocol.h>
@@ -31,8 +32,8 @@
 
 namespace mocap{
 const int DEFAULT_PROTOCOL_VERSION = 18;
-template <class ProtocolType>
-class QualisysDriver_: public MoCapDriverBase{
+
+class QualisysDriver: public MoCapDriverBase{
 
   public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -40,22 +41,40 @@ class QualisysDriver_: public MoCapDriverBase{
      * @brief Constructor
      * @param nh Ros node
      */
-    QualisysDriver_(const ros::NodeHandle& n):
+    QualisysDriver(const ros::NodeHandle& n):
       MoCapDriverBase   (n),
       max_accel         (10.0),
       frame_interval    (0.01),
       last_packet_time  (0),
       process_noise     (Eigen::Matrix<double, 12, 12>::Zero()),
       measurement_noise (Eigen::Matrix<double, 6, 6>::Zero())
-      {
+    {
+      port_protocol.reset(new CRTProtocol);
+      return;
+    }
+
+    /*
+     * @brief Constructor with protocol for testing purposes
+     * @param nh Ros node
+     * @param protocol
+     */
+    QualisysDriver(const ros::NodeHandle& n, std::shared_ptr<CRTProtocol> protocol):
+      MoCapDriverBase   (n),
+      port_protocol     (protocol),
+      max_accel         (10.0),
+      frame_interval    (0.01),
+      last_packet_time  (0),
+      process_noise     (Eigen::Matrix<double, 12, 12>::Zero()),
+      measurement_noise (Eigen::Matrix<double, 6, 6>::Zero())
+    {
       return;
     }
 
     /*
      * @brief Destructor
      */
-    ~QualisysDriver_() {
-      if (port_protocol.Connected()){
+    ~QualisysDriver() {
+      if (port_protocol->Connected()){
         disconnect();
       }
       return;
@@ -87,14 +106,15 @@ class QualisysDriver_: public MoCapDriverBase{
 
     private: double dt;
     public:
-    inline  double get_dt() {
+    inline  double getDt() {
       return dt;
     }
 
+
   private:
     // Disable the copy constructor and assign operator
-    QualisysDriver_(const QualisysDriver_& );
-    QualisysDriver_& operator=(const QualisysDriver_& );
+    QualisysDriver(const QualisysDriver&);
+    QualisysDriver& operator=(const QualisysDriver&);
 
     // Handle a frame which contains the info of all subjects
     void handleFrame();
@@ -116,7 +136,7 @@ class QualisysDriver_: public MoCapDriverBase{
     int qtm_protocol_version;
 
     // Protocol to connect to the server
-    ProtocolType port_protocol;
+    std::shared_ptr<CRTProtocol> port_protocol;
 
     // A pointer to the received packet
     // (no need to initialize)
@@ -151,7 +171,7 @@ class QualisysDriver_: public MoCapDriverBase{
 //template <class ProtocolType>
 //const int DEFAULT_PROTOCOL_VERSION = 18;
 
-typedef QualisysDriver_<CRTProtocol> QualisysDriver;
-typedef QualisysDriver_<MockCRTProtocol> TestQualisysDriver;
+//typedef QualisysDriver_<CRTProtocol> QualisysDriver;
+//typedef QualisysDriver_<MockCRTProtocol> TestQualisysDriver;
 } //namespace mocap
 #endif

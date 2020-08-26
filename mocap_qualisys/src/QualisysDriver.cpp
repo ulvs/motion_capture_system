@@ -28,11 +28,9 @@ using namespace Eigen;
 
 namespace mocap{
 
-template <class ProtocolType>
-double QualisysDriver_<ProtocolType>::deg2rad = M_PI / 180.0;
+double QualisysDriver::deg2rad = M_PI / 180.0;
 
-template <class ProtocolType>
-bool QualisysDriver_<ProtocolType>::init() {
+bool QualisysDriver::init() {
   // The base port (as entered in QTM, TCP/IP port number, in the RT output tab
   // of the workspace options
   nh.param("server_address", server_address, string(""));
@@ -40,7 +38,7 @@ bool QualisysDriver_<ProtocolType>::init() {
   nh.param("model_list", model_list, vector<string>(0));
   int unsigned_frame_rate;
   nh.param("frame_rate", unsigned_frame_rate, 0);
-  frame_rate = unsigned_frame_rate > 0 ? unsigned_frame_rate : 0;
+  unsigned int requested_frame_rate = unsigned_frame_rate > 0 ? unsigned_frame_rate : 0;
   nh.param("max_accel", max_accel, 10.0);
   nh.param("publish_tf", publish_tf, false);
   nh.param("fixed_frame_id", fixed_frame_id, string("mocap"));
@@ -74,14 +72,14 @@ bool QualisysDriver_<ProtocolType>::init() {
     ROS_WARN("Requested QTM protocol version 1.%i too low. Using 1.%i",
              qtm_protocol_version, DEFAULT_PROTOCOL_VERSION);
   }
-  if (!port_protocol.Connect((char *)server_address.data(), 
+  if (!port_protocol->Connect((char *)server_address.data(), 
                              base_port, 
                              udp_port_ptr, 
                              major_protocol_version, 
                              minor_protocol_version)) {
     ROS_FATAL_STREAM("Connection to QTM server at: "
         << server_address << ":" << base_port << " failed\n"
-        "Reason: " << port_protocol.GetErrorString());
+        "Reason: " << port_protocol->GetErrorString());
     return false;
   }
 
@@ -93,43 +91,45 @@ bool QualisysDriver_<ProtocolType>::init() {
   }
   // Get 6DOF settings
   bool bDataAvailable = false;
-  port_protocol.Read6DOFSettings(bDataAvailable);
+  port_protocol->Read6DOFSettings(bDataAvailable);
   if (bDataAvailable == false) {
     ROS_FATAL_STREAM("Reading 6DOF body settings failed during intialization\n"
-                  << "QTM error: " << port_protocol.GetErrorString());
+                  << "QTM error: " << port_protocol->GetErrorString());
     return false;
   }
   // Read system settings
-  if (!port_protocol.ReadCameraSystemSettings()){
+  if (!port_protocol->ReadCameraSystemSettings()){
     ROS_FATAL_STREAM("Failed to read system settings during intialization\n"
-                   << "QTM error: " << port_protocol.GetErrorString());
+                   << "QTM error: " << port_protocol->GetErrorString());
     return false;
   }
   // Start streaming data frames
-  unsigned int system_frequency = port_protocol.GetSystemFrequency();
-  CRTProtocol::EStreamRate stream_rate_mode = CRTProtocol::EStreamRate::RateAllFrames;
-  dt = 1.0/system_frequency;
-  if (frame_rate < system_frequency && frame_rate > 0){
-    stream_rate_mode = CRTProtocol::EStreamRate::RateFrequency;
-    if (frame_rate <= system_frequency -1){
-      frame_rate += 1;
+  unsigned int system_frequency = port_protocol->GetSystemFrequency();
+  CRTProtocol::EStreamRate stream_rate_mode; 
+  if (requested_frame_rate >= system_frequency || requested_frame_rate == 0){
+    stream_rate_mode = CRTProtocol::EStreamRate::RateAllFrames;
+    frame_rate = system_frequency;
+    dt = 1.0/system_frequency;
+    if (requested_frame_rate > system_frequency){
+      ROS_WARN("Requested capture rate %i greater than system capture rate %i.", 
+               requested_frame_rate, system_frequency);
     }
+  } else {
+    stream_rate_mode = CRTProtocol::EStreamRate::RateFrequency;
     int divisor = 2;
-    unsigned int actual_frame_rate = port_protocol.GetSystemFrequency();
-    while (actual_frame_rate >= frame_rate){
-      actual_frame_rate = port_protocol.GetSystemFrequency()/divisor;
+    unsigned int actual_frame_rate = system_frequency;
+    while (actual_frame_rate > requested_frame_rate){
+      //ROS_FATAL("actual_frame_rate: %i", actual_frame_rate);
+      actual_frame_rate = system_frequency/divisor;
       divisor++;
     }
     dt = 1.0/actual_frame_rate;
-  }
-  else {
-    if (frame_rate > system_frequency){
-      ROS_WARN("Requested capture rate %i greater than system capture rate %i.", 
-               frame_rate, system_frequency);
+    frame_rate = actual_frame_rate;
+    if (frame_rate < system_frequency - 1){
+      frame_rate += 1;
     }
-    frame_rate = system_frequency;
   }
-  bDataAvailable = port_protocol.StreamFrames(
+  bDataAvailable = port_protocol->StreamFrames(
       stream_rate_mode,
       frame_rate, // nRateArg
       udp_stream_port, // nUDPPort
@@ -146,37 +146,35 @@ bool QualisysDriver_<ProtocolType>::init() {
     Matrix<double, 6, 6>::Identity()*1e-3;
   measurement_noise *= measurement_noise; // Make it a covariance
   model_set.insert(model_list.begin(), model_list.end());
+  // -- 
   is_initialized = true;
   return true;
 }
 
-template <class ProtocolType>
-void QualisysDriver_<ProtocolType>::disconnect() {
+void QualisysDriver::disconnect() {
   ROS_INFO_STREAM("Disconnected from the QTM server at "
       << server_address << ":" << base_port);
-  port_protocol.StreamFramesStop();
-  port_protocol.Disconnect();
+  port_protocol->StreamFramesStop();
+  port_protocol->Disconnect();
   return;
 }
 
-template <class ProtocolType>
-bool QualisysDriver_<ProtocolType>::isInitialized() {
+bool QualisysDriver::isInitialized() {
   return is_initialized;
 }
 
-template <class ProtocolType>
-bool QualisysDriver_<ProtocolType>::run() {
-  prt_packet = port_protocol.GetRTPacket();
+bool QualisysDriver::run() {
+  prt_packet = port_protocol->GetRTPacket();
   CRTPacket::EPacketType e_type;
   bool is_ok = false;
 
-  if(port_protocol.ReceiveRTPacket(e_type, true)) {
+  if(port_protocol->ReceiveRTPacket(e_type, true)) {
     switch(e_type) {
       // Case 1 - sHeader.nType 0 indicates an error
       case CRTPacket::PacketError:
         ROS_ERROR_STREAM_THROTTLE(
             1, "Error when streaming frames: "
-            << port_protocol.GetRTPacket()->GetErrorString());
+            << port_protocol->GetRTPacket()->GetErrorString());
         break;
 
       // Case 2 - No more data
@@ -196,18 +194,17 @@ bool QualisysDriver_<ProtocolType>::run() {
 
       default:
         ROS_WARN_THROTTLE(1, "Unhandled CRTPacket type, case: %i", e_type);
-        ROS_WARN_THROTTLE(1, "Unhandled CRTPacket type, case: %i", e_type);
         break;
     }
   }
   else { // 
-    ROS_ERROR_STREAM("QTM error when receiving packet:\n" << port_protocol.GetErrorString());
+    ROS_ERROR_STREAM("QTM error when receiving packet:\n" 
+                     << port_protocol->GetErrorString());
   }
   return is_ok;
 }
 
-template <class ProtocolType>
-void QualisysDriver_<ProtocolType>::handleFrame() {
+void QualisysDriver::handleFrame() {
   // Number of rigid bodies
   int body_count = prt_packet->Get6DOFBodyCount();
   // Compute the timestamp
@@ -225,8 +222,7 @@ void QualisysDriver_<ProtocolType>::handleFrame() {
   }
   previous_frame_time = current_frame_time;
   for (int i = 0; i< body_count; ++i) {
-    string subject_name(port_protocol.Get6DOFBodyName(i));
-
+    string subject_name(port_protocol->Get6DOFBodyName(i));
     // Process the subject if required
     if (model_set.empty() || model_set.count(subject_name)) {
       // Create a new subject if it does not exist
@@ -242,10 +238,9 @@ void QualisysDriver_<ProtocolType>::handleFrame() {
   return;
 }
 
-template <class ProtocolType>
-void QualisysDriver_<ProtocolType>::handleSubject(int sub_idx) {
+void QualisysDriver::handleSubject(int sub_idx) {
   // Name of the subject
-  string subject_name(port_protocol.Get6DOFBodyName(sub_idx));
+  string subject_name(port_protocol->Get6DOFBodyName(sub_idx));
   // Pose of the subject
   const unsigned int matrix_size = 9;
   float x, y, z;
@@ -315,8 +310,5 @@ void QualisysDriver_<ProtocolType>::handleSubject(int sub_idx) {
   }
   return;
 }
-
-template class QualisysDriver_<CRTProtocol>;
-template class QualisysDriver_<MockCRTProtocol>;
 
 }

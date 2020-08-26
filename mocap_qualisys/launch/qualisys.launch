@@ -14,6 +14,7 @@
     requests that specific port -->
     <param name="udp_port" value="0"/>
     <param name="qtm_protocol_version" value="18"/>
+    <param name="delay_compensation" value="5000"/>
     <rosparam param="model_list">[]</rosparam>
     <!--remap from="qualisys/F450/odom" to="/f450/odom"/-->
   </node>

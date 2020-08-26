@@ -188,7 +188,7 @@ public:
     };
 
 
-    unsigned int GetSystemFrequency() const;
+    virtual unsigned int GetSystemFrequency() const;
 public:
     struct SSettingsGeneralCamera
     {
@@ -494,43 +494,43 @@ public:
     CRTProtocol();
     virtual ~CRTProtocol();
 
-    bool       Connect(const char* pServerAddr, unsigned short nPort, unsigned short* pnUDPServerPort = nullptr,
+    virtual bool       Connect(const char* pServerAddr, unsigned short nPort, unsigned short* pnUDPServerPort = nullptr,
                        int nMajorVersion = MAJOR_VERSION, int nMinorVersion = MINOR_VERSION, bool bBigEndian = false);
-    unsigned short GetUdpServerPort();
-    void       Disconnect();
-    bool       Connected() const;
-    bool       SetVersion(int nMajorVersion, int nMinorVersion);
-    bool       GetVersion(unsigned int &nMajorVersion, unsigned int &nMinorVersion);
-    bool       GetQTMVersion(char* pVersion, unsigned int nVersionLen);
-    bool       GetByteOrder(bool &bBigEndian);
-    bool       CheckLicense(const char* pLicenseCode);
-    bool       DiscoverRTServer(unsigned short nServerPort, bool bNoLocalResponses, unsigned short nDiscoverPort = cDefaultAutoDescoverPort);
-    int        GetNumberOfDiscoverResponses();
-    bool       GetDiscoverResponse(unsigned int nIndex, unsigned int &nAddr, unsigned short &nBasePort, std::string& message);
+    virtual unsigned short GetUdpServerPort();
+    virtual void       Disconnect();
+    virtual bool       Connected() const;
+    virtual bool       SetVersion(int nMajorVersion, int nMinorVersion);
+    virtual bool       GetVersion(unsigned int &nMajorVersion, unsigned int &nMinorVersion);
+    virtual bool       GetQTMVersion(char* pVersion, unsigned int nVersionLen);
+    virtual bool       GetByteOrder(bool &bBigEndian);
+    virtual bool       CheckLicense(const char* pLicenseCode);
+    virtual bool       DiscoverRTServer(unsigned short nServerPort, bool bNoLocalResponses, unsigned short nDiscoverPort = cDefaultAutoDescoverPort);
+    virtual int        GetNumberOfDiscoverResponses();
+    virtual bool       GetDiscoverResponse(unsigned int nIndex, unsigned int &nAddr, unsigned short &nBasePort, std::string& message);
 
-    bool       GetCurrentFrame(const char* components);
-    bool       GetCurrentFrame(unsigned int nComponentType, const SComponentOptions& componentOptions = { });
-    bool       StreamFrames(EStreamRate eRate, unsigned int nRateArg, unsigned short nUDPPort, const char* pUDPAddr, const char* components);
-    bool       StreamFrames(EStreamRate eRate, unsigned int nRateArg, unsigned short nUDPPort, const char* pUDPAddr,
+    virtual bool       GetCurrentFrame(const char* components);
+    virtual bool       GetCurrentFrame(unsigned int nComponentType, const SComponentOptions& componentOptions = { });
+    virtual bool       StreamFrames(EStreamRate eRate, unsigned int nRateArg, unsigned short nUDPPort, const char* pUDPAddr, const char* components);
+    virtual bool       StreamFrames(EStreamRate eRate, unsigned int nRateArg, unsigned short nUDPPort, const char* pUDPAddr,
                             unsigned int nComponentType, const SComponentOptions& componentOptions = { });
-    bool       StreamFramesStop();
-    bool       GetState(CRTPacket::EEvent &eEvent, bool bUpdate = true, int nTimeout = cWaitForDataTimeout);
-    bool       GetCapture(const char* pFileName, bool bC3D);
-    bool       SendTrig();
-    bool       SetQTMEvent(const char* pLabel);
-    bool       TakeControl(const char* pPassword = nullptr);
-    bool       ReleaseControl();
-    bool       IsControlling();
-    bool       NewMeasurement();
-    bool       CloseMeasurement();
-    bool       StartCapture();
-    bool       StartRTOnFile();
-    bool       StopCapture();
-    bool       Calibrate(const bool refine, SCalibration &calibrationResult, int timeout = cWaitForCalibrationTimeout);
-    bool       LoadCapture(const char* pFileName);
-    bool       SaveCapture(const char* pFileName, bool bOverwrite, char* pNewFileName = nullptr, int nSizeOfNewFileName = 0);
-    bool       LoadProject(const char* pFileName);
-    bool       Reprocess();
+    virtual bool       StreamFramesStop();
+    virtual bool       GetState(CRTPacket::EEvent &eEvent, bool bUpdate = true, int nTimeout = cWaitForDataTimeout);
+    virtual bool       GetCapture(const char* pFileName, bool bC3D);
+    virtual bool       SendTrig();
+    virtual bool       SetQTMEvent(const char* pLabel);
+    virtual bool       TakeControl(const char* pPassword = nullptr);
+    virtual bool       ReleaseControl();
+    virtual bool       IsControlling();
+    virtual bool       NewMeasurement();
+    virtual bool       CloseMeasurement();
+    virtual bool       StartCapture();
+    virtual bool       StartRTOnFile();
+    virtual bool       StopCapture();
+    virtual bool       Calibrate(const bool refine, SCalibration &calibrationResult, int timeout = cWaitForCalibrationTimeout);
+    virtual bool       LoadCapture(const char* pFileName);
+    virtual bool       SaveCapture(const char* pFileName, bool bOverwrite, char* pNewFileName = nullptr, int nSizeOfNewFileName = 0);
+    virtual bool       LoadProject(const char* pFileName);
+    virtual bool       Reprocess();
 
     static bool GetEventString(CRTPacket::EEvent eEvent, char* pStr);
     static bool ConvertRateString(const char* pRate, EStreamRate &eRate, unsigned int &nRateArg);
@@ -539,174 +539,174 @@ public:
     static std::vector<std::pair<unsigned int, std::string>> GetComponents(const std::string componentsString);
     static bool GetComponent(std::string componentStr, unsigned int &component, std::string &option);
 
-    int        ReceiveRTPacket(CRTPacket::EPacketType &eType, bool bSkipEvents = true, int nTimeout = cWaitForDataTimeout); // nTimeout < 0 : Blocking receive
+    virtual int        ReceiveRTPacket(CRTPacket::EPacketType &eType, bool bSkipEvents = true, int nTimeout = cWaitForDataTimeout); // nTimeout < 0 : Blocking receive
     
 
-    CRTPacket* GetRTPacket();
+    virtual CRTPacket* GetRTPacket();
 
-    bool ReadXmlBool(CMarkup* xml, const std::string& element, bool& value) const;
-    bool ReadCameraSystemSettings();
-    bool ReadCalibrationSettings();
-    bool Read3DSettings(bool &bDataAvailable);
-    bool Read6DOFSettings(bool &bDataAvailable);
-    bool ReadGazeVectorSettings(bool &bDataAvailable);
-    bool ReadAnalogSettings(bool &bDataAvailable);
-    bool ReadForceSettings(bool &bDataAvailable);
-    bool ReadImageSettings(bool &bDataAvailable);
-    bool ReadSkeletonSettings(bool &bDataAvailable, bool skeletonGlobalData = false);
+    virtual bool ReadXmlBool(CMarkup* xml, const std::string& element, bool& value) const;
+    virtual bool ReadCameraSystemSettings();
+    virtual bool ReadCalibrationSettings();
+    virtual bool Read3DSettings(bool &bDataAvailable);
+    virtual bool Read6DOFSettings(bool &bDataAvailable);
+    virtual bool ReadGazeVectorSettings(bool &bDataAvailable);
+    virtual bool ReadAnalogSettings(bool &bDataAvailable);
+    virtual bool ReadForceSettings(bool &bDataAvailable);
+    virtual bool ReadImageSettings(bool &bDataAvailable);
+    virtual bool ReadSkeletonSettings(bool &bDataAvailable, bool skeletonGlobalData = false);
 
-    void GetSystemSettings(
+    virtual void GetSystemSettings(
         unsigned int &nCaptureFrequency, float &fCaptureTime,
         bool& bStartOnExtTrig, bool& trigNO, bool& trigNC, bool& trigSoftware,
         EProcessingActions &eProcessingActions, EProcessingActions &eRtProcessingActions, EProcessingActions &eReprocessingActions) const;
 
-    void GetCalibrationSettings(SCalibration &calibrationSettings) const;
+    virtual void GetCalibrationSettings(SCalibration &calibrationSettings) const;
 
-    void GetExtTimeBaseSettings(
+    virtual void GetExtTimeBaseSettings(
         bool         &bEnabled,            ESignalSource &eSignalSource,
         bool         &bSignalModePeriodic, unsigned int  &nFreqMultiplier,
         unsigned int &nFreqDivisor,        unsigned int  &nFreqTolerance,
         float        &fNominalFrequency,   bool          &bNegativeEdge,
         unsigned int &nSignalShutterDelay, float         &fNonPeriodicTimeout) const;
 
-    unsigned int GetCameraCount() const;
-    std::vector<SSettingsGeneralCamera> GetDevices() const;
+    virtual unsigned int GetCameraCount() const;
+    virtual std::vector<SSettingsGeneralCamera> GetDevices() const;
 
-    bool GetCameraSettings(
+    virtual bool GetCameraSettings(
         unsigned int nCameraIndex, unsigned int &nID,     ECameraModel &eModel, 
         bool         &bUnderwater, bool &bSupportsHwSync, unsigned int &nSerial, ECameraMode  &eMode) const;
 
-    bool GetCameraMarkerSettings(
+    virtual bool GetCameraMarkerSettings(
         unsigned int nCameraIndex,       unsigned int &nCurrentExposure,
         unsigned int &nMinExposure,      unsigned int &nMaxExposure,
         unsigned int &nCurrentThreshold, unsigned int &nMinThreshold,
         unsigned int &nMaxThreshold) const;
 
-    bool GetCameraVideoSettings(
+    virtual bool GetCameraVideoSettings(
         unsigned int nCameraIndex,            EVideoResolution &eVideoResolution,
         EVideoAspectRatio &eVideoAspectRatio, unsigned int &nVideoFrequency,
         unsigned int &nCurrentExposure,       unsigned int &nMinExposure,
         unsigned int &nMaxExposure,           unsigned int &nCurrentFlashTime,
         unsigned int &nMinFlashTime,          unsigned int &nMaxFlashTime) const;
 
-    bool GetCameraSyncOutSettings(
+    virtual bool GetCameraSyncOutSettings(
         unsigned int nCameraIndex,   unsigned int portNumber, ESyncOutFreqMode &eSyncOutMode,
         unsigned int &nSyncOutValue, float        &fSyncOutDutyCycle,
         bool         &bSyncOutNegativePolarity) const;
 
-    bool GetCameraPosition(
+    virtual bool GetCameraPosition(
         unsigned int nCameraIndex, SPoint &sPoint, float fvRotationMatrix[3][3]) const;
 
-    bool GetCameraOrientation(
+    virtual bool GetCameraOrientation(
         unsigned int nCameraIndex, int &nOrientation) const;
 
-    bool GetCameraResolution(
+    virtual bool GetCameraResolution(
         unsigned int nCameraIndex,   unsigned int &nMarkerWidth,
         unsigned int &nMarkerHeight, unsigned int &nVideoWidth,
         unsigned int &nVideoHeight) const;
 
-    bool GetCameraFOV(
+    virtual bool GetCameraFOV(
         unsigned int nCameraIndex,  unsigned int &nMarkerLeft,  unsigned int &nMarkerTop,
         unsigned int &nMarkerRight, unsigned int &nMarkerBottom,
         unsigned int &nVideoLeft,   unsigned int &nVideoTop,
         unsigned int &nVideoRight,  unsigned int &nVideoBottom) const;
 
-    bool GetCameraLensControlSettings(const unsigned int nCameraIndex, float* focus, float* aperture) const;
-	bool GetCameraAutoExposureSettings(const unsigned int nCameraIndex, bool* autoExposureEnabled, float* autoExposureCompensation) const;
-    bool GetCameraAutoWhiteBalance(const unsigned int nCameraIndex, bool* autoWhiteBalanceEnabled) const;
+    virtual bool GetCameraLensControlSettings(const unsigned int nCameraIndex, float* focus, float* aperture) const;
+	virtual bool GetCameraAutoExposureSettings(const unsigned int nCameraIndex, bool* autoExposureEnabled, float* autoExposureCompensation) const;
+    virtual bool GetCameraAutoWhiteBalance(const unsigned int nCameraIndex, bool* autoWhiteBalanceEnabled) const;
 
-    EAxis        Get3DUpwardAxis() const;
-    const char*  Get3DCalibrated() const;
-    unsigned int Get3DLabeledMarkerCount() const;
-    const char*  Get3DLabelName(unsigned int nMarkerIndex) const;
-    unsigned int Get3DLabelColor(unsigned int nMarkerIndex) const;
+    virtual EAxis        Get3DUpwardAxis() const;
+    virtual const char*  Get3DCalibrated() const;
+    virtual unsigned int Get3DLabeledMarkerCount() const;
+    virtual const char*  Get3DLabelName(unsigned int nMarkerIndex) const;
+    virtual unsigned int Get3DLabelColor(unsigned int nMarkerIndex) const;
 
-    unsigned int Get3DBoneCount() const;
-    const char*  Get3DBoneFromName(unsigned int boneIndex) const;
-    const char*  Get3DBoneToName(unsigned int boneIndex) const;
+    virtual unsigned int Get3DBoneCount() const;
+    virtual const char*  Get3DBoneFromName(unsigned int boneIndex) const;
+    virtual const char*  Get3DBoneToName(unsigned int boneIndex) const;
 
-    void         Get6DOFEulerNames(std::string &first, std::string &second, std::string &third) const;
-    unsigned int Get6DOFBodyCount() const;
-    const char*  Get6DOFBodyName(unsigned int nBodyIndex) const;
-    unsigned int Get6DOFBodyColor(unsigned int nBodyIndex) const;
-    unsigned int Get6DOFBodyPointCount(unsigned int nBodyIndex) const;
-    bool         Get6DOFBodyPoint(unsigned int nBodyIndex, unsigned int nMarkerIndex, SPoint &sPoint) const;
+    virtual void         Get6DOFEulerNames(std::string &first, std::string &second, std::string &third) const;
+    virtual unsigned int Get6DOFBodyCount() const;
+    virtual const char*  Get6DOFBodyName(unsigned int nBodyIndex) const;
+    virtual unsigned int Get6DOFBodyColor(unsigned int nBodyIndex) const;
+    virtual unsigned int Get6DOFBodyPointCount(unsigned int nBodyIndex) const;
+    virtual bool         Get6DOFBodyPoint(unsigned int nBodyIndex, unsigned int nMarkerIndex, SPoint &sPoint) const;
 
-    unsigned int GetGazeVectorCount() const;
-    const char*  GetGazeVectorName(unsigned int nGazeVectorIndex) const;
-    float        GetGazeVectorFrequency(unsigned int nGazeVectorIndex) const;
+    virtual unsigned int GetGazeVectorCount() const;
+    virtual const char*  GetGazeVectorName(unsigned int nGazeVectorIndex) const;
+    virtual float        GetGazeVectorFrequency(unsigned int nGazeVectorIndex) const;
 
-    unsigned int GetAnalogDeviceCount() const;
-    bool         GetAnalogDevice(unsigned int nDeviceIndex, unsigned int &nDeviceID, unsigned int &nChannels,
+    virtual unsigned int GetAnalogDeviceCount() const;
+    virtual bool         GetAnalogDevice(unsigned int nDeviceIndex, unsigned int &nDeviceID, unsigned int &nChannels,
                                  char* &pName, unsigned int &nFrequency, char* &pUnit,
                                  float &fMinRange, float &fMaxRange) const;
-    const char*  GetAnalogLabel(unsigned int nDeviceIndex, unsigned int nChannelIndex) const;
-    const char*  GetAnalogUnit(unsigned int nDeviceIndex, unsigned int nChannelIndex) const;
+    virtual const char*  GetAnalogLabel(unsigned int nDeviceIndex, unsigned int nChannelIndex) const;
+    virtual const char*  GetAnalogUnit(unsigned int nDeviceIndex, unsigned int nChannelIndex) const;
 
-    void         GetForceUnits(char* &pLength, char* &pForce) const;
-    unsigned int GetForcePlateCount() const;
-    bool         GetForcePlate(unsigned int nPlateIndex, unsigned int &nID, unsigned int &nAnalogDeviceID,
+    virtual void         GetForceUnits(char* &pLength, char* &pForce) const;
+    virtual unsigned int GetForcePlateCount() const;
+    virtual bool         GetForcePlate(unsigned int nPlateIndex, unsigned int &nID, unsigned int &nAnalogDeviceID,
                                unsigned int &nFrequency, char* &pType, char* &pName, float &fLength, float &fWidth) const;
-    bool         GetForcePlateLocation(unsigned int nPlateIndex, SPoint sCorner[4]) const;
-    bool         GetForcePlateOrigin(unsigned int nPlateIndex, SPoint &sOrigin) const;
-    unsigned int GetForcePlateChannelCount(unsigned int nPlateIndex) const;
-    bool         GetForcePlateChannel(unsigned int nPlateIndex, unsigned int nChannelIndex,
+    virtual bool         GetForcePlateLocation(unsigned int nPlateIndex, SPoint sCorner[4]) const;
+    virtual bool         GetForcePlateOrigin(unsigned int nPlateIndex, SPoint &sOrigin) const;
+    virtual unsigned int GetForcePlateChannelCount(unsigned int nPlateIndex) const;
+    virtual bool         GetForcePlateChannel(unsigned int nPlateIndex, unsigned int nChannelIndex,
                                       unsigned int &nChannelNumber, float &fConversionFactor) const;
-    bool         GetForcePlateCalibrationMatrix(unsigned int nPlateIndex, float fvCalMatrix[12][12], unsigned int* rows, unsigned int* columns) const;
+    virtual bool         GetForcePlateCalibrationMatrix(unsigned int nPlateIndex, float fvCalMatrix[12][12], unsigned int* rows, unsigned int* columns) const;
 
-    unsigned int GetImageCameraCount() const;
-    bool         GetImageCamera(unsigned int nCameraIndex, unsigned int &nCameraID, bool &bEnabled,
+    virtual unsigned int GetImageCameraCount() const;
+    virtual bool         GetImageCamera(unsigned int nCameraIndex, unsigned int &nCameraID, bool &bEnabled,
                                 CRTPacket::EImageFormat &eFormat, unsigned int &nWidth, unsigned int &nHeight,
                                 float &fCropLeft, float &fCropTop, float &fCropRight, float &fCropBottom) const;
 
-    unsigned int GetSkeletonCount() const;
-    const char*  GetSkeletonName(unsigned int skeletonIndex);
-    unsigned int GetSkeletonSegmentCount(unsigned int skeletonIndex);
-    bool         GetSkeleton(unsigned int skeletonIndex, SSettingsSkeleton* skeleton);
-    bool         GetSkeletonSegment(unsigned int skeletonIndex, unsigned int segmentIndex, SSettingsSkeletonSegment* segment);// parentIndex = -1 => No parent.
+    virtual unsigned int GetSkeletonCount() const;
+    virtual const char*  GetSkeletonName(unsigned int skeletonIndex);
+    virtual unsigned int GetSkeletonSegmentCount(unsigned int skeletonIndex);
+    virtual bool         GetSkeleton(unsigned int skeletonIndex, SSettingsSkeleton* skeleton);
+    virtual bool         GetSkeletonSegment(unsigned int skeletonIndex, unsigned int segmentIndex, SSettingsSkeletonSegment* segment);// parentIndex = -1 => No parent.
 
 
-    bool SetSystemSettings(
+    virtual bool SetSystemSettings(
         const unsigned int* pnCaptureFrequency, const float* pfCaptureTime,
         const bool* pbStartOnExtTrig, const bool* trigNO, const bool* trigNC, const bool* trigSoftware,
         const EProcessingActions* peProcessingActions, const EProcessingActions* peRtProcessingActions, const EProcessingActions* peReprocessingActions);
 
-    bool SetExtTimeBaseSettings(
+    virtual bool SetExtTimeBaseSettings(
         const bool*         pbEnabled,            const ESignalSource* peSignalSource,
         const bool*         pbSignalModePeriodic, const unsigned int*  pnFreqMultiplier,
         const unsigned int* pnFreqDivisor,        const unsigned int*  pnFreqTolerance,
         const float*        pfNominalFrequency,   const bool*          pbNegativeEdge,
         const unsigned int* pnSignalShutterDelay, const float*         pfNonPeriodicTimeout);
 
-    bool SetCameraSettings(
+    virtual bool SetCameraSettings(
         const unsigned int nCameraID,        const ECameraMode* peMode,
         const float*       pfMarkerExposure, const float*       pfMarkerThreshold,
         const int*         pnOrientation);
 
-    bool SetCameraVideoSettings(
+    virtual bool SetCameraVideoSettings(
         const unsigned int nCameraID,               const EVideoResolution* eVideoResolution,
         const EVideoAspectRatio* eVideoAspectRatio, const unsigned int* pnVideoFrequency,
         const float* pfVideoExposure,               const float* pfVideoFlashTime);
 
-    bool SetCameraSyncOutSettings(
+    virtual bool SetCameraSyncOutSettings(
         const unsigned int  nCameraID,      const unsigned int portNumber, const ESyncOutFreqMode* peSyncOutMode,
         const unsigned int* pnSyncOutValue, const float*       pfSyncOutDutyCycle,
         const bool*         pbSyncOutNegativePolarity);
 
-    bool SetCameraLensControlSettings(const unsigned int nCameraID, const float focus, const float aperture);
-	bool SetCameraAutoExposureSettings(const unsigned int nCameraID, const bool autoExposure, const float compensation);
-    bool SetCameraAutoWhiteBalance(const unsigned int nCameraID, const bool enable);
+    virtual bool SetCameraLensControlSettings(const unsigned int nCameraID, const float focus, const float aperture);
+	virtual bool SetCameraAutoExposureSettings(const unsigned int nCameraID, const bool autoExposure, const float compensation);
+    virtual bool SetCameraAutoWhiteBalance(const unsigned int nCameraID, const bool enable);
 
-    bool SetImageSettings(
+    virtual bool SetImageSettings(
         const unsigned int  nCameraID, const bool*         pbEnable,    const CRTPacket::EImageFormat* peFormat,
         const unsigned int* pnWidth,   const unsigned int* pnHeight,    const float* pfLeftCrop,
         const float*        pfTopCrop, const float*        pfRightCrop, const float* pfBottomCrop);
 
-    bool SetForceSettings(
+    virtual bool SetForceSettings(
         const unsigned int nPlateID,  const SPoint* psCorner1, const SPoint* psCorner2,
         const SPoint*      psCorner3, const SPoint* psCorner4);
 
-    char* GetErrorString();
+    virtual const char* GetErrorString();
 
 private:
     bool SendString(const char* pCmdStr, int nType);

@@ -1,8 +1,10 @@
 
 #include <string>
 #include <cstdint>
+#include <limits>
 #include <math.h>
 #include <sstream>
+#include <stdexcept>
 #include <ros/ros.h>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -13,7 +15,6 @@
 class MockCRTProtocol : public CRTProtocol{
     public:
     static const unsigned int NUM_6DOF_BODIES = 4;
-
     struct PacketHeader
     {
         uint32_t size;  //Size of packet in bytes
@@ -59,11 +60,30 @@ class MockCRTProtocol : public CRTProtocol{
     CRTProtocol::SSettings6DOF mvs6DOFSettings;
     CRTPacket  mockRTPacket;
     Packet6DOF spoof_packet;
+    Packet6DOF  spoof_nan_packet;
+    bool next_packet_is_nan = false;
     std::vector<char> mockDataBuff;
     ros::Time mock_time;
 
-    unsigned int GetSystemFrequency(){
-        return 100;
+    /* Connection status variables */
+    bool is_connected = false;
+    bool has_camera_settings = false;
+    bool has_6dof_data = false;
+    bool is_streaming = false;
+    std::string server_address = "";
+    short base_port = 0;
+    bool is_tcp = false;
+    bool is_udp = false;
+    short udp_port = 0;
+    int minor_version = 1;
+
+    const unsigned int system_frequency = 100;
+    unsigned int GetSystemFrequency() const {
+        if (has_camera_settings == false){
+            return 0;
+        } else {
+            return system_frequency;
+        }
     }
 
     unsigned int GetSystemRate(){
@@ -77,11 +97,38 @@ class MockCRTProtocol : public CRTProtocol{
         packet.packet_header.time_stamp = 0;
         packet.packet_header.frame_number = 0;
         packet.packet_header.component_count = 1;
-
+        Eigen::Matrix<float, 3, 3, Eigen::ColMajor> rot_matrix;
+        rot_matrix.setIdentity();
         for (uint32_t i; i<NUM_6DOF_BODIES; i++) {
             packet.data[i].x = 0.0;
             packet.data[i].y = 0.0;
             packet.data[i].z = 0.0;
+            memcpy(packet.data[i].rotation, rot_matrix.data(), sizeof(float)*9);
+        }
+    }
+
+    void init_6DOF_nan_packet(Packet6DOF& packet){
+        packet.packet_header.size = sizeof(packet);
+        packet.packet_header.time_stamp = 0;
+        packet.packet_header.frame_number = 0;
+        packet.packet_header.component_count = 1;
+        const int num_floats = 9;
+        const float init_values[num_floats] = {
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN(),
+        };
+        for (uint32_t i; i<NUM_6DOF_BODIES; i++) {
+            packet.data[i].x = std::numeric_limits<float>::quiet_NaN();
+            packet.data[i].y = std::numeric_limits<float>::quiet_NaN();
+            packet.data[i].z = std::numeric_limits<float>::quiet_NaN();
+            memcpy(packet.data[i].rotation, init_values, sizeof(float)*num_floats);
         }
     }
 
@@ -107,21 +154,6 @@ class MockCRTProtocol : public CRTProtocol{
     }
 
     int disconnect_calls = 0;
-    static MockCRTProtocol* current_protocol;
-    MockCRTProtocol():CRTProtocol::CRTProtocol(){
-        current_protocol = this;
-    }
-
-    /* Connection status variables */
-    bool is_connected = false;
-    bool has_6dof_data = false;
-    bool is_streaming = false;
-    std::string server_address = "";
-    short base_port = 0;
-    bool is_tcp = false;
-    bool is_udp = false;
-    short udp_port = 0;
-    int minor_version = 1;
     bool Connect(
         const char* pServerAddr, 
         unsigned short nPort, 
@@ -131,6 +163,7 @@ class MockCRTProtocol : public CRTProtocol{
         bool bBigEndian = false) 
     {
         init_6DOF_packet(spoof_packet);
+        init_6DOF_nan_packet(spoof_nan_packet);
         server_address = pServerAddr;
         base_port = nPort;
         if (pnUDPServerPort != nullptr){
@@ -175,8 +208,9 @@ class MockCRTProtocol : public CRTProtocol{
     bool ReadCameraSystemSettings(){
         if (!is_connected) {
             maErrorStr = "MOCK not initialized (in ReadCameraSystemSettings)";
-        }
-        return is_connected;
+        } 
+        has_camera_settings = is_connected;
+        return has_camera_settings;
     }
 
     unsigned int Get6DOFBodyCount() const {
@@ -187,7 +221,7 @@ class MockCRTProtocol : public CRTProtocol{
         }
     }
 
-    const char* Get6DOFBodyName(unsigned int index){
+    const char* Get6DOFBodyName(unsigned int index) const {
         return mvs6DOFSettings.bodySettings.at(index).oName.c_str();
     }
 
@@ -195,25 +229,15 @@ class MockCRTProtocol : public CRTProtocol{
         return maErrorStr.c_str();
     }
 
+    void setNextPacketNan(){
+        next_packet_is_nan = true;
+    }
+
     CRTPacket* GetRTPacket(){
         return &mockRTPacket;
     }
 
     unsigned int frame_rate = 0;
-    bool StreamFrames(EStreamRate eRate, unsigned int nRateArg, unsigned short nUDPPort, const char* pUDPAddr, const char* components){
-        is_streaming = true;
-        if (nRateArg == GetSystemFrequency()){
-            frame_rate = nRateArg;
-        } else {
-            int divisor = 2;
-            frame_rate = GetSystemFrequency();
-            while (frame_rate >= nRateArg){
-                frame_rate = GetSystemFrequency()/divisor;
-                divisor++;
-            }
-        }
-        return is_streaming;
-    } 
 
     bool StreamFrames(EStreamRate eRate, 
                         unsigned int nRateArg, 
@@ -221,17 +245,30 @@ class MockCRTProtocol : public CRTProtocol{
                         const char* pUDPAddr,
                         unsigned int nComponentType,
                         const SComponentOptions& componentOptions = { }) {
-        is_streaming = true;
-        if (nRateArg == GetSystemFrequency()){
+        if (is_connected == false) {
+            return false;
+        }
+        if(nComponentType != cComponent6d){
+            throw std::runtime_error(
+                "Invalid nComponentType argument passed to stream frames");
+        }
+        if (eRate == EStreamRate::RateAllFrames){
+            frame_rate = system_frequency;
+        }
+        else if (nRateArg == system_frequency){
             frame_rate = nRateArg;
-        } else {
+        } 
+        else if (nRateArg > 0) {
             int divisor = 2;
-            frame_rate = GetSystemFrequency();
+            frame_rate = system_frequency;
             while (frame_rate >= nRateArg){
-                frame_rate = GetSystemFrequency()/divisor;
+                frame_rate = system_frequency/divisor;
                 divisor++;
             }
+        } else {
+            throw std::runtime_error("RateFrequency mode requested with nRateArg = 0");
         }
+        is_streaming = true;
         return is_streaming;
     }
 
@@ -256,15 +293,23 @@ class MockCRTProtocol : public CRTProtocol{
             return -1;
         }
         update_6DOF_packet(spoof_packet);
-        char* ptr_begin = (char*)&spoof_packet;
-        char* ptr_end = ptr_begin + sizeof(spoof_packet);
+        char* ptr_begin;
+        char* ptr_end;
+        if (next_packet_is_nan){
+            ROS_FATAL("IS NAN!");
+            ptr_begin = (char*)&spoof_nan_packet;
+            ptr_end = ptr_begin + sizeof(spoof_nan_packet);
+            next_packet_is_nan = false;
+        } else {
+            ptr_begin = (char*)&spoof_packet;
+            ptr_end = ptr_begin + sizeof(spoof_packet);
+        }
         mockDataBuff = std::vector<char>(ptr_begin, ptr_end);
         mockRTPacket.SetData(mockDataBuff.data());
-        eType = mockRTPacket.GetType(mockDataBuff.data(), false); 
+        eType = mockRTPacket.GetType(mockDataBuff.data(), false);
         return sizeof(spoof_packet);
     }
 };
 
 float MockCRTProtocol::linear_velocity = 1000.0;
 float MockCRTProtocol::angular_velocity = M_PI/4.0;
-MockCRTProtocol* MockCRTProtocol::current_protocol = nullptr;
